@@ -1,0 +1,108 @@
+Metadata-Version: 2.1
+Name: mitgcm_assim
+Version: 0.1.0
+Summary: Utilities for MITgcm data assimilation analysis
+Home-page: 
+Author: TPOSE6 Analysis Team
+Author-email: 
+Classifier: Development Status :: 3 - Alpha
+Classifier: Intended Audience :: Science/Research
+Classifier: Topic :: Scientific/Engineering :: Atmospheric Science
+Classifier: Topic :: Scientific/Engineering :: Physics
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.7
+Classifier: Programming Language :: Python :: 3.8
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Requires-Python: >=3.7
+Description-Content-Type: text/markdown
+Requires-Dist: numpy
+Requires-Dist: xarray
+Requires-Dist: MITgcmutils
+Requires-Dist: xmitgcm
+Provides-Extra: dev
+Requires-Dist: pytest; extra == "dev"
+Requires-Dist: pytest-cov; extra == "dev"
+Requires-Dist: flake8; extra == "dev"
+Requires-Dist: black; extra == "dev"
+
+# MITgcm Data Assimilation Utilities
+
+This package provides utilities for loading and analyzing MITgcm data assimilation files from TPOSE6 velocity data assimilation project.
+
+## Installation
+
+Install the package in development mode:
+
+```bash
+cd mitgcm-assim
+pip install -e .
+```
+
+## Usage
+
+### Loading Cost Function Data
+
+```python
+import mitgcm_assim.load_cost as load_cost
+
+# Read all costfunction* files in current directory
+ds = load_cost.read_costfunction('.')
+
+# Access total cost for all iterations
+fc_cost = ds.cost.sel(dataset='fc')
+print(fc_cost.values)
+
+# Access specific dataset costs
+tao_u_cost = ds.cost.sel(dataset='TAO_WO_2012_ADCP_prof_U')
+print(f"U-velocity cost: {tao_u_cost.values}")
+```
+
+### Loading Control Variables and Sensitivities
+
+```python
+import mitgcm_assim.load_ctrls as load_ctrls
+
+# Load all default variables
+ds = load_ctrls.read_controls_and_sensitivities('./data', './grid', 0)
+
+# Load specific variables only
+ds = load_ctrls.read_controls_and_sensitivities(
+    './data', './grid', 0,
+    control_vars=['xx_theta', 'xx_salt'],
+    sensitivity_vars=['adxx_theta', 'adxx_salt']
+)
+
+# Load a single control variable
+da = load_ctrls.read_single_control('./data', 'xx_theta', 0)
+
+# Check what variables are available
+available = load_ctrls.get_available_controls('./data', 0)
+print("Available controls:", available['controls'])
+```
+
+## Modules
+
+### `mitgcm_assim.load_cost`
+
+Functions for reading MITgcm cost function files into xarray Datasets:
+
+- `read_costfunction(directory)`: Read all costfunction* files in a directory
+- `parse_costfunction_file(filepath)`: Parse a single costfunction file
+
+### `mitgcm_assim.load_ctrls` 
+
+Functions for reading MITgcm control variables and sensitivities:
+
+- `read_controls_and_sensitivities()`: Load control variables and sensitivities with grid coordinates
+- `read_single_control()`: Load a single control variable
+- `get_available_controls()`: List available control files in a directory
+
+## Requirements
+
+- numpy
+- xarray  
+- MITgcmutils
+- xmitgcm

@@ -1,0 +1,10 @@
+numpy
+xarray
+MITgcmutils
+xmitgcm
+
+[dev]
+pytest
+pytest-cov
+flake8
+black

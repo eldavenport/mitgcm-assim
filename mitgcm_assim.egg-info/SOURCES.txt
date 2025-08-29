@@ -1,0 +1,11 @@
+README.md
+setup.py
+mitgcm_assim/__init__.py
+mitgcm_assim/load_cost.py
+mitgcm_assim/load_ctrls.py
+mitgcm_assim.egg-info/PKG-INFO
+mitgcm_assim.egg-info/SOURCES.txt
+mitgcm_assim.egg-info/dependency_links.txt
+mitgcm_assim.egg-info/not-zip-safe
+mitgcm_assim.egg-info/requires.txt
+mitgcm_assim.egg-info/top_level.txt

@@ -1,6 +1,6 @@
 # MITgcm Data Assimilation Utilities
 
-This package provides utilities for loading and analyzing MITgcm data assimilation files, primarily costfunction*, adxx, and xx files. xmitgcm doens't handle these automatically. this uses the MITgcm readmds Python funcitonality.
+This package provides utilities for loading and analyzing MITgcm data assimilation files, primarily costfunction*, adxx, and xx files. xmitgcm doens't handle these automatically. this uses the MITgcm readmds Python funcitonality. This code depends on xarray, numpy, MITgcmutils, and xmitgcm. If you provide the ctrls functions a grid directory from an MITgcm model run, then xmitgcm will load the grid and use that to put the adxx and xx files on the grid in a DataArray. If you don't give it a grid directory then the coords will be kept as time, i, j, k.
 
 ## Installation
 

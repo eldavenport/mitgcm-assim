@@ -1,6 +1,6 @@
 # MITgcm Data Assimilation Utilities
 
-This package provides utilities for loading and analyzing MITgcm data assimilation files from TPOSE6 velocity data assimilation project.
+This package provides utilities for loading and analyzing MITgcm data assimilation files, primarily costfunction*, adxx, and xx files. xmitgcm doens't handle these automatically. this uses the MITgcm readmds Python funcitonality.
 
 ## Installation
 

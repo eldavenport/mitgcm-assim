@@ -78,7 +78,7 @@ def _get_variable_units(var_name):
         return CONTROL_VARIABLE_UNITS.get(var_name, 'unknown')
 
 
-def read_controls_and_sensitivities(data_dir, grid_dir, iteration, 
+def read_controls_and_sensitivities(data_dir, grid_dir, iteration=None, 
                                     control_vars=None, sensitivity_vars=None, 
                                     effective_vars=None, load_grid_ds=True):
     """
@@ -90,8 +90,9 @@ def read_controls_and_sensitivities(data_dir, grid_dir, iteration,
         Directory containing the control/sensitivity files
     grid_dir : str  
         Directory containing grid files
-    iteration : int
-        Iteration number to load
+    iteration : int or None, optional
+        Iteration number to load. If None, loads all available iterations and adds
+        an 'iter' dimension to each variable.
     control_vars : list of str, optional
         List of control variable names to load (e.g., ['xx_theta', 'xx_salt'])
         If None, loads common control variables
@@ -107,14 +108,18 @@ def read_controls_and_sensitivities(data_dir, grid_dir, iteration,
     Returns
     -------
     xarray.Dataset
-        Dataset containing control variables, sensitivities, and model grid coordinates
+        Dataset containing control variables, sensitivities, and model grid coordinates.
+        If iteration=None, variables will have an 'iter' dimension with all available iterations.
         
     Examples
     --------
     >>> import mitgcm_assim.load_ctrls as load_ctrls
-    >>> # Load all default variables
+    >>> # Load all default variables for specific iteration
     >>> ds = load_ctrls.read_controls_and_sensitivities('./data', './grid', 0)
     >>> 
+    >>> # Load all iterations
+    >>> ds = load_ctrls.read_controls_and_sensitivities('./data', './grid')
+    >>>
     >>> # Load specific variables only
     >>> ds = load_ctrls.read_controls_and_sensitivities(
     ...     './data', './grid', 0,
@@ -135,11 +140,24 @@ def read_controls_and_sensitivities(data_dir, grid_dir, iteration,
     if effective_vars is None:
         effective_vars = [var + '.effective' for var in control_vars]
     
-    # Load grid information
+    # Determine which iterations to load
+    if iteration is None:
+        # Load all available iterations
+        iterations_to_load = get_available_iterations(data_dir)
+        if not iterations_to_load:
+            raise ValueError(f"No iteration files found in {data_dir}")
+        print(f"Loading all available iterations: {iterations_to_load}")
+        load_all_iters = True
+    else:
+        # Load single iteration
+        iterations_to_load = [iteration]
+        load_all_iters = False
+    
+    # Load grid information (use first iteration for grid)
     grid_ds = None
     if load_grid_ds:
         try:
-            grid_ds = open_mdsdataset(data_dir, grid_dir=grid_dir, iters=iteration, 
+            grid_ds = open_mdsdataset(data_dir, grid_dir=grid_dir, iters=iterations_to_load[0], 
                                     ignore_unknown_vars=True)
         except Exception as e:
             print(f"Warning: Could not load grid dataset: {e}")
@@ -152,19 +170,43 @@ def read_controls_and_sensitivities(data_dir, grid_dir, iteration,
     all_vars = control_vars + sensitivity_vars + effective_vars
     
     for var_name in all_vars:
-        try:
-            # Load data using rdmds
-            data, _, meta = mds.rdmds(f'{data_dir}/{var_name}', iteration, returnmeta=True)
+        if load_all_iters:
+            # Load variable for all iterations and concatenate along iter dimension
+            var_data_list = []
+            for iter_num in iterations_to_load:
+                try:
+                    # Load data using rdmds
+                    data, _, meta = mds.rdmds(f'{data_dir}/{var_name}', iter_num, returnmeta=True)
+                    
+                    # Create DataArray with appropriate coordinates
+                    da = _create_dataarray_from_rdmds(data, meta, var_name, grid_ds)
+                    var_data_list.append(da)
+                    
+                except Exception as e:
+                    print(f"Warning: Could not load {var_name} for iteration {iter_num}: {e}")
+                    continue
             
-            # Create DataArray with appropriate coordinates
-            da = _create_dataarray_from_rdmds(data, meta, var_name, grid_ds)
-            data_vars[var_name] = da
-            
-            # Don't collect generic coordinates - we'll replace them with grid coordinates
-            
-        except Exception as e:
-            print(f"Warning: Could not load {var_name}: {e}")
-            continue
+            if var_data_list:
+                # Concatenate along new 'iter' dimension
+                try:
+                    combined_da = xr.concat(var_data_list, dim='iter')
+                    combined_da = combined_da.assign_coords(iter=iterations_to_load[:len(var_data_list)])
+                    data_vars[var_name] = combined_da
+                except Exception as e:
+                    print(f"Warning: Could not concatenate {var_name} across iterations: {e}")
+        else:
+            # Load single iteration (original behavior)
+            try:
+                # Load data using rdmds
+                data, _, meta = mds.rdmds(f'{data_dir}/{var_name}', iteration, returnmeta=True)
+                
+                # Create DataArray with appropriate coordinates
+                da = _create_dataarray_from_rdmds(data, meta, var_name, grid_ds)
+                data_vars[var_name] = da
+                
+            except Exception as e:
+                print(f"Warning: Could not load {var_name}: {e}")
+                continue
     
     # Add model grid coordinates if available
     if grid_ds is not None:
@@ -194,6 +236,10 @@ def read_controls_and_sensitivities(data_dir, grid_dir, iteration,
                 coords['dyG'] = grid_ds.dyG
         except Exception as e:
             print(f"Warning: Could not add all grid coordinates: {e}")
+    
+    # Add iteration coordinate if loading all iterations
+    if load_all_iters and iterations_to_load:
+        coords['iter'] = iterations_to_load
     
     # Replace coordinate names in data variables to use proper grid names
     for var_name, da in data_vars.items():
@@ -460,6 +506,50 @@ def read_single_control(data_dir, var_name, iteration, grid_ds=None):
     da = _create_dataarray_from_rdmds(data, meta, var_name, grid_ds)
     
     return da
+
+
+def get_available_iterations(data_dir):
+    """
+    Get list of available iterations in a directory.
+    
+    Parameters
+    ----------
+    data_dir : str
+        Directory to search
+        
+    Returns
+    -------
+    list of int
+        Sorted list of available iteration numbers
+        
+    Examples
+    --------
+    >>> import mitgcm_assim.ctrls as ctrls
+    >>> iterations = ctrls.get_available_iterations('./data')
+    >>> print("Available iterations:", iterations)
+    """
+    import os
+    import glob
+    
+    # Look for files matching iteration pattern
+    pattern = f"{data_dir}/*.??????????.data"
+    files = glob.glob(pattern)
+    
+    iterations = set()
+    for file in files:
+        basename = os.path.basename(file)
+        # Extract iteration number from filename (assuming 10-digit format)
+        try:
+            parts = basename.split('.')
+            # Find the 10-digit iteration number
+            for part in parts:
+                if len(part) == 10 and part.isdigit():
+                    iterations.add(int(part))
+                    break
+        except (ValueError, IndexError):
+            continue
+    
+    return sorted(list(iterations))
 
 
 def get_available_controls(data_dir, iteration):
